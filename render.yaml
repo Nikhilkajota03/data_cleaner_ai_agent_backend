@@ -1,0 +1,71 @@
+services:
+  # ============================================================================
+  # 1. FastMCP Database Execution Sandbox Microservice
+  # ============================================================================
+  - type: web
+    name: data-cleaner-fastmcp
+    runtime: docker
+    dockerfilePath: infra/docker/Dockerfile.fastmcp
+    dockerContext: .
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8001
+      - key: GOVERNANCE_DATABASE_URL
+        sync: false
+      - key: STAGING_DATABASE_URL
+        sync: false
+      - key: MINIO_ENDPOINT
+        value: localhost:9000
+      - key: MINIO_ACCESS_KEY
+        value: minioadmin
+      - key: MINIO_SECRET_KEY
+        value: minioadmin
+      - key: MINIO_BUCKET_NAME
+        value: agent-payloads
+      - key: MINIO_SECURE
+        value: "False"
+
+  # ============================================================================
+  # 2. FastAPI Backend & Agent Gateway
+  # ============================================================================
+  - type: web
+    name: data-cleaner-backend
+    runtime: docker
+    dockerfilePath: infra/docker/Dockerfile.backend
+    dockerContext: .
+    plan: free
+    region: oregon
+    healthCheckPath: /health
+    envVars:
+      - key: PORT
+        value: 8000
+      - key: GROQ_API_KEY
+        sync: false
+      - key: GOVERNANCE_DATABASE_URL
+        sync: false
+      - key: STAGING_DATABASE_URL
+        sync: false
+      - key: GOVERNANCE_SYNC_DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: FASTMCP_SERVICE_URL
+        fromService:
+          type: web
+          name: data-cleaner-fastmcp
+          property: host
+      - key: MINIO_ENDPOINT
+        value: localhost:9000
+      - key: MINIO_ACCESS_KEY
+        value: minioadmin
+      - key: MINIO_SECRET_KEY
+        value: minioadmin
+      - key: MINIO_BUCKET_NAME
+        value: agent-payloads
+      - key: MINIO_SECURE
+        value: "False"
+      - key: JWT_SECRET
+        generateValue: true

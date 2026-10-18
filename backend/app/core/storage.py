@@ -6,10 +6,13 @@ from decimal import Decimal
 from typing import Any, Optional
 from urllib.parse import urlparse
 
+import logging
 from minio import Minio
 from minio.error import S3Error
 
 from backend.app.core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 class CustomJSONEncoder(json.JSONEncoder):
@@ -39,15 +42,20 @@ class StorageManager:
         )
 
     def ensure_bucket_exists(self, bucket_name: Optional[str] = None) -> None:
-        """Ensures the target MinIO bucket exists, creating it if necessary."""
+        """Ensures the target MinIO/S3 bucket exists, creating it if necessary."""
         target_bucket = bucket_name or self.bucket_name
         try:
             if not self.client.bucket_exists(target_bucket):
                 self.client.make_bucket(target_bucket)
         except S3Error as e:
-            raise RuntimeError(
-                f"Failed to verify or create bucket '{target_bucket}': {e}"
-            ) from e
+            if e.code in ("BucketAlreadyOwnedByYou", "BucketAlreadyExists"):
+                return
+            logger.warning(
+                f"Could not automatically create/verify bucket '{target_bucket}' via API: {e}. "
+                "Ensure bucket is created in Cloudflare R2/S3 console."
+            )
+        except Exception as e:
+            logger.warning(f"Storage check warning for bucket '{target_bucket}': {e}")
 
     def offload_if_exceeds_threshold(
         self,
@@ -67,21 +75,28 @@ class StorageManager:
         if payload_size < self.threshold_bytes:
             return payload, None
 
-        # 2. Payload exceeds 5KB: Offload to MinIO cold storage
-        self.ensure_bucket_exists(self.bucket_name)
-
+        # 2. Payload exceeds threshold: Try S3 offload, fallback to local storage
         date_str = datetime.utcnow().strftime("%Y%m%d")
         object_name = f"{file_prefix}/{date_str}/{uuid.uuid4()}.json"
 
-        self.client.put_object(
-            bucket_name=self.bucket_name,
-            object_name=object_name,
-            data=io.BytesIO(raw_bytes),
-            length=payload_size,
-            content_type="application/json",
-        )
-
-        s3_uri = f"s3://{self.bucket_name}/{object_name}"
+        s3_uri = None
+        try:
+            self.ensure_bucket_exists(self.bucket_name)
+            self.client.put_object(
+                bucket_name=self.bucket_name,
+                object_name=object_name,
+                data=io.BytesIO(raw_bytes),
+                length=payload_size,
+                content_type="application/json",
+            )
+            s3_uri = f"s3://{self.bucket_name}/{object_name}"
+        except Exception as e:
+            logger.warning(f"S3 offload unavailable or failed: {e}. Falling back to local filesystem.")
+            local_dir = Path("/tmp/data_cleaner_payloads") / date_str
+            local_dir.mkdir(parents=True, exist_ok=True)
+            local_file = local_dir / f"{uuid.uuid4()}.json"
+            local_file.write_bytes(raw_bytes)
+            s3_uri = f"file://{local_file.resolve()}"
 
         # Generate a compact preview representation for inline state
         summary_sample: Any
@@ -103,10 +118,18 @@ class StorageManager:
         return offloaded_summary, s3_uri
 
     def retrieve_payload(self, s3_uri: str) -> Any:
-        """Downloads and deserializes a previously offloaded JSON payload from S3."""
+        """Downloads and deserializes a previously offloaded JSON payload from S3 or local file."""
         parsed = urlparse(s3_uri)
+        if parsed.scheme in ("file", "local"):
+            path_str = parsed.path if parsed.path else parsed.netloc
+            local_path = Path(path_str)
+            if local_path.exists():
+                with open(local_path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            raise FileNotFoundError(f"Local payload file not found: {local_path}")
+
         if parsed.scheme != "s3":
-            raise ValueError(f"Invalid S3 URI scheme: {s3_uri}")
+            raise ValueError(f"Invalid payload URI scheme: {s3_uri}")
 
         bucket_name = parsed.netloc
         object_name = parsed.path.lstrip("/")

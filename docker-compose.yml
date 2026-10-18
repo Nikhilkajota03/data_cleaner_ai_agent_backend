@@ -82,6 +82,44 @@ services:
       redis:
         condition: service_healthy
 
+  # ============================================================================
+  # FastAPI Backend Service (Agent Orchestration & REST API)
+  # ============================================================================
+  backend:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.backend
+    container_name: data_cleaner_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      GROQ_API_KEY: ${GROQ_API_KEY:-gsk_placeholder}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_secure_password}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      GOVERNANCE_DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_password}@postgres:5432/governance_db"
+      STAGING_DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_password}@postgres:5432/staging_db"
+      GOVERNANCE_SYNC_DATABASE_URL: "postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_password}@postgres:5432/governance_db"
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_URL: "redis://redis:6379/0"
+      MINIO_ENDPOINT: "minio:9000"
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-agent-payloads}
+      MINIO_SECURE: "False"
+      FASTMCP_SERVICE_URL: "http://fastmcp:8001"
+      JWT_SECRET: ${JWT_SECRET:-enterprise_super_secret_signing_key_replace_in_prod_at_least_32_chars}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      fastmcp:
+        condition: service_started
+
 volumes:
   postgres_data:
   redis_data:

@@ -19,4 +19,4 @@ COPY fastmcp_server /app/fastmcp_server
 
 EXPOSE 8001
 
-CMD ["uvicorn", "fastmcp_server.server:app", "--host", "0.0.0.0", "--port", "8001"]
+CMD ["sh", "-c", "uvicorn fastmcp_server.server:app --host 0.0.0.0 --port ${PORT:-8001}"]
