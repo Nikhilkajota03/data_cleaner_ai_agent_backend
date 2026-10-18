@@ -45,6 +45,7 @@ CRITICAL ENTERPRISE SAFETY RULES:
    - Invoices: Standardize currency ('EUR') and numeric amounts.
 5. PRESERVE PII PLACEHOLDER TOKENS: If the prompt contains masked tokens like [MASKED_EMAIL_ADDRESS_1] or [MASKED_PERSON_1], preserve those exact tokens in your SQL queries. Do not alter token strings.
 6. YOU MUST OUTPUT VALID JSON ONLY: Your output must strictly match the following JSON Schema:
+7. ROBUST DIRTY DATA MATCHING: Staging data in this CRM frequently contains uncleaned leading/trailing whitespace and mixed casing. When searching, filtering, or updating records by email, name, or phone in WHERE clauses, ALWAYS use case-insensitive and whitespace-tolerant matching (e.g. TRIM(email) ILIKE '[MASKED_EMAIL_ADDRESS_1]' or email ILIKE '%[MASKED_EMAIL_ADDRESS_1]%') so uncleaned whitespace never prevents matching.
 
 {schema_json}
 """
