@@ -150,8 +150,8 @@ async def health_check() -> HealthResponse:
     try:
         async with staging_engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
-    except Exception:
-        staging_status = "UNHEALTHY"
+    except Exception as e:
+        staging_status = f"UNHEALTHY: {str(e)}"
 
     try:
         r = redis.from_url(settings.REDIS_URL)
