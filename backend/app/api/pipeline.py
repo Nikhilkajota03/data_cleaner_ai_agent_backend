@@ -102,7 +102,7 @@ async def _execute_pipeline_task(thread_id: str, initial_state: dict[str, Any]) 
                                 try:
                                     plan_uuid = uuid.UUID(str(plan_id_str))
                                 except (ValueError, TypeError, AttributeError):
-                                    plan_uuid = uuid.uuid5(uuid.NAMESPACE_DNS, str(plan_id_str) if plan_id_str else str(uuid.uuid4()))
+                                    plan_uuid = uuid.uuid4()
                             plan_data["plan_id"] = str(plan_uuid)
                             plan_hash = compute_plan_hash(plan_data)
 
@@ -123,6 +123,7 @@ async def _execute_pipeline_task(thread_id: str, initial_state: dict[str, Any]) 
                                 )
                                 session.add(new_plan)
                             else:
+                                existing_ep.thread_id = t_uuid
                                 existing_ep.proposed_sql_plan = plan_data
                                 existing_ep.judge_score = judge_data.get("score")
                                 existing_ep.judge_feedback = judge_data.get("feedback")

@@ -198,6 +198,20 @@ async def approve_plan(
         )
         thread_obj.updated_at = datetime.now(timezone.utc)
 
+    try:
+        p_uuid = uuid.UUID(str(plan_id)) if not isinstance(plan_id, uuid.UUID) else plan_id
+    except (ValueError, TypeError, AttributeError):
+        p_uuid = None
+
+    if p_uuid:
+        plan_stmt = select(ExecutionPlan).where(ExecutionPlan.plan_id == p_uuid)
+        p_res = await gov_db.execute(plan_stmt)
+        plan_obj = p_res.scalar_one_or_none()
+        if plan_obj:
+            plan_obj.status = WorkflowStatus.APPROVED
+            plan_obj.approved_by = request.approver_id
+            plan_obj.approved_at = datetime.fromisoformat(now_iso)
+
     # Add message history log
     msg_record = MessageHistory(
         thread_id=t_uuid,

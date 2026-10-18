@@ -40,25 +40,35 @@ def _iso(value: Any) -> str | None:
 
 def _summarize(
     execution: AgentExecution,
-    plan: ExecutionPlan,
-    thread: SupervisorThread,
+    plan: ExecutionPlan | None,
+    thread: SupervisorThread | None,
     pre_image_count: int,
 ) -> dict[str, Any]:
     output = execution.agent_output or {}
-    plan_json = plan.proposed_sql_plan or {}
-    rolled_back = plan.status == WorkflowStatus.ROLLED_BACK
+    plan_json = (plan.proposed_sql_plan or {}) if plan else {}
+    rolled_back = (plan.status == WorkflowStatus.ROLLED_BACK) if plan else False
     effective_status = "ROLLED_BACK" if rolled_back else execution.status.value
+
+    # Deterministic master_goal resolution
+    master_goal = (
+        (thread.master_goal if thread and thread.master_goal else None)
+        or (execution.sub_task_input or {}).get("master_goal")
+        or output.get("master_goal")
+        or plan_json.get("summary")
+        or "Enterprise Data Operation"
+    )
+
     return {
         "execution_id": str(execution.execution_id),
-        "plan_id": str(plan.plan_id),
-        "thread_id": str(thread.thread_id),
-        "master_goal": thread.master_goal,
+        "plan_id": str(plan.plan_id) if plan else str(execution.plan_id or ""),
+        "thread_id": str(thread.thread_id) if thread else (str(plan.thread_id) if plan and plan.thread_id else ""),
+        "master_goal": master_goal,
         "status": effective_status,
-        "approved_by": plan.approved_by,
-        "approved_at": _iso(plan.approved_at),
-        "judge_score": float(plan.judge_score) if plan.judge_score is not None else None,
+        "approved_by": plan.approved_by if plan else None,
+        "approved_at": _iso(plan.approved_at) if plan else None,
+        "judge_score": float(plan.judge_score) if plan and plan.judge_score is not None else None,
         "plan_summary": plan_json.get("summary"),
-        "affected_rows": output.get("total_affected_rows", output.get("affected_rows")),
+        "affected_rows": output.get("total_affected_rows", output.get("affected_rows", 0)),
         "pre_images_captured": pre_image_count,
         "started_at": _iso(execution.started_at),
         "completed_at": _iso(execution.completed_at),
@@ -76,11 +86,12 @@ async def list_executions(
     limit: int = Query(default=50, ge=1, le=200),
     gov_db: AsyncSession = Depends(get_gov_db),
 ) -> list[dict[str, Any]]:
+    latest_time_col = func.coalesce(AgentExecution.completed_at, AgentExecution.started_at)
     stmt = (
         select(AgentExecution, ExecutionPlan, SupervisorThread)
-        .join(ExecutionPlan, AgentExecution.plan_id == ExecutionPlan.plan_id)
-        .join(SupervisorThread, ExecutionPlan.thread_id == SupervisorThread.thread_id)
-        .order_by(AgentExecution.started_at.desc())
+        .outerjoin(ExecutionPlan, AgentExecution.plan_id == ExecutionPlan.plan_id)
+        .outerjoin(SupervisorThread, ExecutionPlan.thread_id == SupervisorThread.thread_id)
+        .order_by(latest_time_col.desc(), AgentExecution.started_at.desc())
         .offset(skip)
         .limit(limit)
     )
@@ -112,8 +123,8 @@ async def get_execution_detail(
 
     stmt = (
         select(AgentExecution, ExecutionPlan, SupervisorThread)
-        .join(ExecutionPlan, AgentExecution.plan_id == ExecutionPlan.plan_id)
-        .join(SupervisorThread, ExecutionPlan.thread_id == SupervisorThread.thread_id)
+        .outerjoin(ExecutionPlan, AgentExecution.plan_id == ExecutionPlan.plan_id)
+        .outerjoin(SupervisorThread, ExecutionPlan.thread_id == SupervisorThread.thread_id)
         .where(AgentExecution.execution_id == exec_uuid)
     )
     row = (await gov_db.execute(stmt)).first()
@@ -161,7 +172,8 @@ async def get_execution_detail(
         )
 
     query_results = (execution.agent_output or {}).get("query_results") or []
-    queries = (plan.proposed_sql_plan or {}).get("queries", [])
+    plan_json = (plan.proposed_sql_plan or {}) if plan else {}
+    queries = plan_json.get("queries", [])
 
     def _to_sql_str(item: Any) -> str:
         if isinstance(item, dict):
@@ -175,10 +187,11 @@ async def get_execution_detail(
     if not query_results and is_read_only:
         raw_exec_queries = (execution.sub_task_input or {}).get("queries") or queries
         exec_queries = [_to_sql_str(q).strip() for q in raw_exec_queries if _to_sql_str(q).strip()]
+        goal_text = (thread.master_goal if thread and thread.master_goal else "") or (execution.sub_task_input or {}).get("master_goal", "")
         for clean_q in exec_queries:
-            if "[MASKED_" in clean_q and thread.master_goal:
+            if "[MASKED_" in clean_q and goal_text:
                 import re
-                emails = re.findall(r'[\w\.-]+@[\w\.-]+', thread.master_goal)
+                emails = re.findall(r'[\w\.-]+@[\w\.-]+', goal_text)
                 for idx, email in enumerate(emails, 1):
                     clean_q = clean_q.replace(f"[MASKED_EMAIL_ADDRESS_{idx}]", email)
                     clean_q = clean_q.replace("[MASKED_EMAIL_ADDRESS]", email)
@@ -195,7 +208,7 @@ async def get_execution_detail(
 
     summary = _summarize(execution, plan, thread, len(pre_images))
     summary["queries"] = queries
-    summary["judge_feedback"] = plan.judge_feedback
+    summary["judge_feedback"] = plan.judge_feedback if plan else None
     summary["diffs"] = diffs
     summary["query_results"] = query_results
     summary["is_read_only"] = is_read_only

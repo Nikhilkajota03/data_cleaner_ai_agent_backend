@@ -17,6 +17,7 @@ import json
 import logging
 import re
 from typing import Any, Optional
+import uuid
 
 import httpx
 from langchain_core.messages import AIMessage
@@ -205,6 +206,8 @@ async def planner_node(state: ComplianceState) -> dict[str, Any]:
         schema_context=schema_context,
         feedback_history=feedback,
     )
+    # Ensure every generated plan has a fresh unique UUID so it never collides with previous plans
+    plan.plan_id = str(uuid.uuid4())
 
     query_count = len(plan.queries)
     summary_msg = (

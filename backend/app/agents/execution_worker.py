@@ -121,16 +121,24 @@ class ExecutionWorker:
                     )
                     gov_session.add(plan_record)
                     await gov_session.flush()
+                elif plan_record.thread_id != t_uuid:
+                    plan_record.thread_id = t_uuid
+                    await gov_session.flush()
 
                 e_uuid = _to_uuid(execution_id)
                 exec_record = await gov_session.get(AgentExecution, e_uuid)
+                now_utc = datetime.now(timezone.utc)
                 if not exec_record:
                     exec_record = AgentExecution(
                         execution_id=e_uuid,
                         plan_id=p_uuid,
                         agent_name=AgentRole.EXECUTION_WORKER,
-                        sub_task_input={"queries": unmasked_queries},
+                        sub_task_input={
+                            "queries": unmasked_queries,
+                            "master_goal": thread.master_goal if thread else plan.summary,
+                        },
                         status=WorkflowStatus.EXECUTING,
+                        started_at=now_utc,
                     )
                     gov_session.add(exec_record)
                     await gov_session.commit()
@@ -227,12 +235,15 @@ class ExecutionWorker:
                 if exec_record:
                     exec_record.status = WorkflowStatus.COMPLETED
                     exec_record.completed_at = datetime.now(timezone.utc)
+                    existing_input = exec_record.sub_task_input or {}
+                    master_goal = existing_input.get("master_goal") or plan.summary
                     exec_record.agent_output = {
                         "affected_rows": total_affected,
                         "pre_images_captured": total_pre_images,
                         "payload_s3_uri": s3_uri,
                         "query_results": collected_results,
                         "details": execution_details,
+                        "master_goal": master_goal,
                     }
                     await gov_session.commit()
         except Exception as e:
