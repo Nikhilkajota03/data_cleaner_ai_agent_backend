@@ -23,9 +23,9 @@ class Settings(BaseSettings):
 
     # Groq LLM Configuration
     GROQ_API_KEY: str = Field(default="gsk_placeholder", description="Groq API Key")
-    GROQ_PLANNER_MODEL: str = "openai/gpt-oss-120b"
-    GROQ_JUDGE_MODEL: str = "openai/gpt-oss-120b"
-    GROQ_FAST_MODEL: str = "openai/gpt-oss-20b"
+    GROQ_PLANNER_MODEL: str = "qwen/qwen3.8-27b"
+    GROQ_JUDGE_MODEL: str = "qwen/qwen3.8-27b"
+    GROQ_FAST_MODEL: str = "qwen/qwen3.8-27b"
 
     # Dual PostgreSQL Configuration
     POSTGRES_USER: str = "postgres"
