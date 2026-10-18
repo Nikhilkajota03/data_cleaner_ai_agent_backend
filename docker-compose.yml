@@ -1,0 +1,88 @@
+services:
+  # ============================================================================
+  # PostgreSQL 16 - Dual Database (governance_db + staging_db)
+  # ============================================================================
+  postgres:
+    image: postgres:16-alpine
+    container_name: data_cleaner_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_secure_password}
+      POSTGRES_DB: postgres
+    ports:
+      - "${POSTGRES_PORT:-5434}:5432"
+    volumes:
+      - ./infra/postgres:/docker-entrypoint-initdb.d:ro
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================================
+  # Redis 7 - Hot Session Memory (TTL, step counters, thread locks)
+  # ============================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: data_cleaner_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # ============================================================================
+  # MinIO - S3 Cold Storage (Payloads > 5KB)
+  # ============================================================================
+  minio:
+    image: elestio/minio:latest
+    container_name: data_cleaner_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minioadmin}
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+  # ============================================================================
+  # FastMCP - Isolated Execution Sandbox (Air-Gapped Tool Protocol)
+  # ============================================================================
+  fastmcp:
+    build:
+      context: .
+      dockerfile: infra/docker/Dockerfile.fastmcp
+    container_name: data_cleaner_fastmcp
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_secure_password}
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      GOVERNANCE_DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_password}@postgres:5432/governance_db"
+      STAGING_DATABASE_URL: "postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres_secure_password}@postgres:5432/staging_db"
+      MINIO_ENDPOINT: "minio:9000"
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minioadmin}
+      MINIO_BUCKET_NAME: ${MINIO_BUCKET_NAME:-agent-payloads}
+      MINIO_SECURE: "False"
+      PAYLOAD_OFFLOAD_THRESHOLD_BYTES: "5120"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
