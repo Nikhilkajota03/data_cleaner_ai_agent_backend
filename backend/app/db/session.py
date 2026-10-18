@@ -9,16 +9,36 @@ from backend.app.core.config import settings
 
 from sqlalchemy.pool import NullPool
 
+def fix_async_db_url(url: str) -> str:
+    """Sanitizes connection URL for asyncpg: strips quotes, ensures +asyncpg driver, and handles SSL parameters."""
+    if not url:
+        return url
+    url = url.strip().strip('"').strip("'")
+    if url.startswith("postgresql://"):
+        url = "postgresql+asyncpg://" + url[len("postgresql://"):]
+    elif url.startswith("postgres://"):
+        url = "postgresql+asyncpg://" + url[len("postgres://"):]
+
+    url = url.replace("sslmode=require", "ssl=require")
+    url = url.replace("channel_binding=require&", "")
+    url = url.replace("&channel_binding=require", "")
+    url = url.replace("?channel_binding=require", "?")
+    url = url.rstrip("?")
+    if "ssl=" not in url:
+        url += "?ssl=require" if "?" not in url else "&ssl=require"
+    return url
+
+
 # 1. Asynchronous Database Engine for Governance & System State
 gov_engine: AsyncEngine = create_async_engine(
-    settings.GOVERNANCE_DATABASE_URL,
+    fix_async_db_url(settings.GOVERNANCE_DATABASE_URL),
     echo=settings.DEBUG,
     poolclass=NullPool,
 )
 
 # 2. Asynchronous Database Engine for Business CRM Target
 staging_engine: AsyncEngine = create_async_engine(
-    settings.STAGING_DATABASE_URL,
+    fix_async_db_url(settings.STAGING_DATABASE_URL),
     echo=settings.DEBUG,
     poolclass=NullPool,
 )
