@@ -182,7 +182,16 @@ async def approve_plan(
 
     # 3. Resume LangGraph execution past the interrupt gate
     logger.info(f"Resuming graph past HITL gate for thread '{request.thread_id}'.")
-    final_state = await compliance_graph.ainvoke(None, config=config)
+    resume_config = {
+        "configurable": {"thread_id": request.thread_id},
+        "tags": ["hitl_resumption", "execution_worker"],
+        "metadata": {
+            "thread_id": request.thread_id,
+            "approver_id": request.approver_id,
+        },
+        "run_name": f"HITL_Resumption_{request.thread_id[:8]}",
+    }
+    final_state = await compliance_graph.ainvoke(None, config=resume_config)
 
     exec_result = final_state.get("execution_result") or {}
     exec_status = exec_result.get("status", "COMPLETED")

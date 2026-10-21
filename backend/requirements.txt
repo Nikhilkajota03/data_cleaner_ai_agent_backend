@@ -9,6 +9,7 @@ python-multipart>=0.0.12
 langgraph>=0.2.34
 langchain-core>=0.3.7
 langchain-groq>=0.2.0
+langsmith>=0.1.140
 langgraph-checkpoint-postgres>=2.0.0
 
 # Database & Async Drivers

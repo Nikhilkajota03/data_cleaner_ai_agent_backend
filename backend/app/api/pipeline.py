@@ -60,7 +60,16 @@ async def _execute_pipeline_task(thread_id: str, initial_state: dict[str, Any]) 
     Executes LangGraph multi-agent pipeline transitions until interrupted at HITL gate.
     Broadcasts each transition via ThreadEventBroadcaster.
     """
-    config = {"configurable": {"thread_id": thread_id}}
+    config = {
+        "configurable": {"thread_id": thread_id},
+        "tags": ["compliance_pipeline", "multi_agent_governance"],
+        "metadata": {
+            "thread_id": thread_id,
+            "user_id": initial_state.get("user_id"),
+            "original_prompt": initial_state.get("original_prompt"),
+        },
+        "run_name": f"CompliancePipeline_{thread_id[:8]}",
+    }
     t_uuid = uuid.UUID(thread_id)
 
     try:

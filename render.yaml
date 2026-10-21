@@ -69,3 +69,9 @@ services:
         value: "False"
       - key: JWT_SECRET
         generateValue: true
+      - key: LANGCHAIN_TRACING_V2
+        value: "false"
+      - key: LANGCHAIN_PROJECT
+        value: "data-cleaner-ai-agent"
+      - key: LANGCHAIN_API_KEY
+        sync: false

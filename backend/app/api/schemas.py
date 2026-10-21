@@ -186,6 +186,7 @@ class HealthResponse(BaseModel):
     postgres_staging_db: str
     redis: str
     fastmcp_sandbox: str
+    langsmith_observability: Optional[str] = "DISABLED"
 
 
 # ==============================================================================

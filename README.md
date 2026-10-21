@@ -18,6 +18,7 @@ The production architecture is deployed across modern serverless and containeriz
 | **Hot Cache Tier** | **Upstash Redis** | Serverless TLS-encrypted Redis for agent session state, step counters, and distributed locks | `REDIS_URL` (`rediss://default:...@...upstash.io:6379`) |
 | **Cold Storage Tier**| **Cloudflare R2 / MinIO**| S3-compatible object storage for execution reports and payload dumps exceeding 5 KB | `MINIO_ENDPOINT`, `MINIO_BUCKET_NAME="agent-payloads"` |
 | **LLM Inference** | **Groq Cloud** | High-speed LLM inference (`qwen/qwen3.8-27b`) with guaranteed JSON schema output | `GROQ_API_KEY` |
+| **Observability** | **LangSmith** | Distributed multi-agent tracing, latency tracking, LLM input/output token telemetry | `LANGCHAIN_TRACING_V2="true"`, `LANGCHAIN_API_KEY` |
 
 ---
 
@@ -97,6 +98,12 @@ PAYLOAD_OFFLOAD_THRESHOLD_BYTES="5120"
 JWT_SECRET="<generate-a-secure-random-32+-character-secret>"
 JWT_ALGORITHM="HS256"
 APPROVAL_TOKEN_EXPIRE_MINUTES="1440"
+
+# LangSmith Observability & Tracing (https://smith.langchain.com)
+LANGCHAIN_TRACING_V2="true"
+LANGCHAIN_API_KEY="lsv2_pt_your_langsmith_api_key_here"
+LANGCHAIN_PROJECT="data-cleaner-ai-agent"
+LANGCHAIN_ENDPOINT="https://api.smith.langchain.com"
 ```
 
 ---

@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Optional
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -20,6 +21,12 @@ class Settings(BaseSettings):
     APP_ENV: str = "development"
     DEBUG: bool = True
     API_V1_PREFIX: str = "/api"
+
+    # LangSmith Observability & Distributed Tracing
+    LANGCHAIN_TRACING_V2: bool = Field(default=False, description="Enable LangSmith Tracing")
+    LANGCHAIN_API_KEY: Optional[str] = Field(default=None, description="LangSmith API Key")
+    LANGCHAIN_PROJECT: str = Field(default="data-cleaner-ai-agent", description="LangSmith Project Name")
+    LANGCHAIN_ENDPOINT: str = Field(default="https://api.smith.langchain.com", description="LangSmith API Endpoint")
 
     # Groq LLM Configuration
     GROQ_API_KEY: str = Field(default="gsk_placeholder", description="Groq API Key")
